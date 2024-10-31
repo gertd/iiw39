@@ -1,0 +1,4 @@
+---
+server: ghcr.io
+username: gertd
+image: ghcr.io/gertd/iiw39

@@ -1,0 +1,119 @@
+name: test
+
+on:
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev-*
+      - release-*
+    tags:
+      - v*
+  # Run tests for all PRs
+  pull_request:
+
+env:
+  GH_TOKEN: ${{ github.token }}
+
+  CONTAINER_REGISTRY: ghcr.io/aserto-dev
+  CONTAINER_IMAGE: topaz
+  CONTAINER_TAG: 0.32.32
+  CONTAINER_PLATFORM: linux/amd64
+  CONTAINER_NAME: topaz
+
+  POLICY_FILE_STORE_ROOT: ${{ github.workspace }}/_policy
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        uses: actions/checkout@v4
+      -
+        name: Set docker context to default
+        run: |
+          docker context list
+          docker context use default
+      -
+        name: Install policy CLI
+        run: |
+          gh release download --repo opcr-io/policy --pattern "policy*_linux_x86_64.zip" --output ./ext/policy.zip --clobber
+          unzip ./ext/policy.zip policy -d bin -o
+          chmod +x ./bin/policy
+          echo "POLICY_FILE_STORE_ROOT: ${POLICY_FILE_STORE_ROOT}"
+          mkdir -p ${POLICY_FILE_STORE_ROOT}
+          touch ${POLICY_FILE_STORE_ROOT}/config.json
+          ./bin/policy version
+      -
+        name: Install topaz CLI
+        run: |
+          gh release download v${{env.CONTAINER_TAG}} --repo aserto-dev/topaz --pattern "topaz_linux_x86_64.zip" --output ./ext/topaz.zip --clobber
+          unzip ./ext/topaz.zip -d bin
+          chmod +x ./bin/topaz
+          ./bin/topaz version
+      -
+        name: Install topazd container
+        run: |
+          ./bin/topaz install \
+          --container-registry=${{env.CONTAINER_REGISTRY}} \
+          --container-image=${{env.CONTAINER_IMAGE}} \
+          --container-tag=${{env.CONTAINER_TAG}} \
+          --container-platform=${{env.CONTAINER_PLATFORM}}
+          ./bin/topaz version
+      -
+        name: Read config
+        id: config
+        uses: gertd/yaml-reader-action@v1.0
+        with:
+          file: .github/config.yaml
+      -
+        name: Policy Login
+        id: policy-login
+        uses: opcr-io/policy-login-action@v3
+        with:
+          username: ${{ steps.config.outputs.username }}
+          password: ${{ secrets.GHCR_PUSH_KEY }}
+          server: ${{ steps.config.outputs.server }}
+        env:
+          POLICY_DEFAULT_DOMAIN: ${{ steps.config.outputs.server }}
+      -
+        name: Policy Build
+        id: policy-build
+        uses: opcr-io/policy-build-action@v3
+        with:
+          src: rego
+          tag: ${{ steps.config.outputs.image }}:test
+          revision: ${{ github.sha }}
+          verbosity: trace
+        env:
+          POLICY_DEFAULT_DOMAIN: ${{ steps.config.outputs.server }}
+      -
+        name: Policy List
+        run: |
+          ./bin/policy images
+      -
+        name: Customize template
+        env:
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          yq -i '.assets.policy.resource |= sub(":latest", ":test")' template.json
+          cat template.json
+      -
+        name: Topaz Template Install
+        run: |
+          ./bin/topaz templates install ./template.json --force --no-console --no-tests
+      -
+        name: Topaz Exec Test (directory)
+        run: |
+          ./bin/topaz ds test exec ${{ github.workspace }}/test/assertions.json --insecure --summary
+      -
+        name: Topaz Exec Test (authorizer)
+        run: |
+          ./bin/topaz az test exec ${{ github.workspace }}/test/decisions.json --insecure --summary
+      -
+        name: Policy Logout
+        id: policy-logout
+        uses: opcr-io/policy-logout-action@v3
+        with:
+          server: ${{ steps.config.outputs.server }}

@@ -1,0 +1,82 @@
+name: build-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+    - '*'
+
+jobs:
+  release_policy:
+    runs-on: ubuntu-latest
+    name: build
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Read config
+      id: config
+      uses: gertd/yaml-reader-action@v1.0
+      with:
+        file: .github/config.yaml
+
+    - name: List semver tags
+      uses: aserto-dev/sver-action@v0
+      id: "sver"
+      with:
+        docker_image: ${{ steps.config.outputs.repo }}
+        docker_registry: ${{ steps.config.outputs.server }}
+        docker_username: ${{ steps.config.outputs.username }}
+        docker_password: ${{ secrets.POLICY_PUSH_KEY }}
+
+    - name: Calculate semver tags
+      id: "tags"
+      run: |
+        while read -r tag; do
+          tags="$tags ${{ steps.config.outputs.repo }}:$tag"
+        done < <(echo "${{ steps.sver.outputs.version }}")
+
+        echo target_tags=${tags} >> $GITHUB_OUTPUT
+
+    - name: Policy Login
+      id: policy-login
+      uses: opcr-io/policy-login-action@v3
+      with:
+        username: ${{ steps.config.outputs.username }}
+        password: ${{ secrets.APCR_PUSH_KEY }}
+        server: ${{ steps.config.outputs.server }}
+
+    - name: Policy Build
+      id: policy-build
+      uses: opcr-io/policy-build-action@v3
+      with:
+        src: rego
+        tag: ${{ steps.config.outputs.repo }}
+        revision: "$GITHUB_SHA"
+      env:
+        POLICY_DEFAULT_DOMAIN: ${{ steps.config.outputs.server }}
+
+    - name: Policy Tag
+      id: policy-tag
+      uses: opcr-io/policy-tag-action@v3
+      with:
+        source_tag: ${{ steps.config.outputs.repo }}
+        target_tags: ${{ steps.tags.outputs.target_tags }}
+      env:
+        POLICY_DEFAULT_DOMAIN: ${{ steps.config.outputs.server }}
+
+    - name: Policy Push
+      id: policy-push
+      uses: opcr-io/policy-push-action@v3
+      with:
+        tags: ${{ steps.tags.outputs.target_tags }}
+      env:
+        POLICY_DEFAULT_DOMAIN: ${{ steps.config.outputs.server }}
+
+    - name: Policy Logout
+      id: policy-logout
+      uses: opcr-io/policy-logout-action@v3
+      with:
+        server: ${{ steps.config.outputs.server }}

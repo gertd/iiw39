@@ -1,0 +1,23 @@
+{
+    "name": "iiw39",
+    "description": "IIW-39 Practical Magic Oct-31 20224",
+    "assets": {
+        "manifest": "model/manifest.yaml",
+        "policy": {
+            "name": "iiw39",
+            "resource": "ghcr.io/aserto-policies/policy-rebac:latest"
+        },
+        "idp_data": [
+            "data/idp_objects.json",
+            "data/idp_relations.json"
+        ],
+        "domain_data": [
+            "data/domain_objects.json",
+            "data/domain_relations.json"
+        ],
+        "assertions": [
+            "test/assertions.json",
+            "test/decisions.json"
+        ]
+    }
+}
