@@ -29,7 +29,7 @@ jobs:
         docker_image: ${{ steps.config.outputs.repo }}
         docker_registry: ${{ steps.config.outputs.server }}
         docker_username: ${{ steps.config.outputs.username }}
-        docker_password: ${{ secrets.POLICY_PUSH_KEY }}
+        docker_password: ${{ secrets.GHCR_PUSH_KEY }}
 
     - name: Calculate semver tags
       id: "tags"
@@ -45,7 +45,7 @@ jobs:
       uses: opcr-io/policy-login-action@v3
       with:
         username: ${{ steps.config.outputs.username }}
-        password: ${{ secrets.APCR_PUSH_KEY }}
+        password: ${{ secrets.GHCR_PUSH_KEY }}
         server: ${{ steps.config.outputs.server }}
 
     - name: Policy Build

@@ -92,13 +92,6 @@ jobs:
         name: Policy List
         run: |
           ./bin/policy images
-      # -
-      #   name: Customize template
-      #   env:
-      #     IMAGE_TAG: ${{ github.sha }}
-      #   run: |
-      #     yq -i '.assets.policy.resource |= sub(":latest", ":test")' template.json
-      #     cat template.json
       -
         name: Topaz Template Install
         run: |
